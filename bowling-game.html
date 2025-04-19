@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bowling Game</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+      text-align: center;
+    }
+    h1 {
+      margin-top: 20px;
+    }
+    #instructions, #scoreboard {
+      margin: 10px auto;
+      font-size: 1rem;
+    }
+    canvas {
+      display: block;
+      margin: 20px auto;
+      background: linear-gradient(#e2d3b3, #c8b28d);
+      border: 2px solid #555;
+      border-radius: 10px;
+    }
+    table {
+      margin: 10px auto;
+      border-collapse: collapse;
+    }
+    th, td {
+      border: 1px solid #444;
+      padding: 5px;
+      width: 50px;
+    }
+    th {
+      background-color: #ddd;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎳 Mini Bowling Game</h1>
+  <p id="instructions">Click and drag to roll the ball</p>
+  <div id="scoreboard">Frame: 1 | Roll: 1 | Score: 0</div>
+
+  <table>
+    <tr id="frameHeader"></tr>
+    <tr id="frameScores"></tr>
+  </table>
+
+  <canvas id="bowlingCanvas" width="400" height="600"></canvas>
+
+  <script>
+    const canvas = document.getElementById("bowlingCanvas");
+    const ctx = canvas.getContext("2d");
+    const scoreboard = document.getElementById("scoreboard");
+    const frameHeader = document.getElementById("frameHeader");
+    const frameScores = document.getElementById("frameScores");
+
+    const ball = {
+      x: 200,
+      y: 550,
+      radius: 15,
+      dx: 0,
+      dy: 0,
+      color: "#333",
+      rolling: false
+    };
+
+    const pins = [];
+    const pinRadius = 10;
+    let mouseStart = null;
+
+    let currentFrame = 1;
+    let rollInFrame = 1;
+    let rolls = []; // all rolls (max 21)
+    let pinsThisFrame = 0;
+
+    const pinStartX = 200;
+    const pinStartY = 100;
+    const rowSpacing = 35;
+    const colSpacing = 20;
+
+    function setupPins() {
+      pins.length = 0;
+      for (let row = 0; row < 4; row++) {
+        for (let i = 0; i <= row; i++) {
+          pins.push({
+            x: pinStartX - (row * colSpacing / 2) + (i * colSpacing),
+            y: pinStartY + (3 - row) * rowSpacing,
+            knocked: false
+          });
+        }
+      }
+    }
+
+    function drawBall() {
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+      ctx.fillStyle = ball.color;
+      ctx.fill();
+    }
+
+    function drawPins() {
+      for (let pin of pins) {
+        if (!pin.knocked) {
+          ctx.beginPath();
+          ctx.arc(pin.x, pin.y, pinRadius, 0, Math.PI * 2);
+          ctx.fillStyle = "white";
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+    }
+
+    function drawLane() {
+      ctx.fillStyle = "#a88b68";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function updateBall() {
+      if (ball.rolling) {
+        ball.x += ball.dx;
+        ball.y += ball.dy;
+
+        checkCollisions();
+
+        if (ball.y < 50 || Math.abs(ball.dy) < 0.5) {
+          ball.rolling = false;
+          setTimeout(endRoll, 800);
+        } else {
+          ball.dx *= 0.98;
+          ball.dy *= 0.98;
+        }
+      }
+    }
+
+    function checkCollisions() {
+      for (let pin of pins) {
+        if (!pin.knocked) {
+          const dist = Math.hypot(pin.x - ball.x, pin.y - ball.y);
+          if (dist < ball.radius + pinRadius) {
+            pin.knocked = true;
+          }
+        }
+      }
+    }
+
+    function resetBall() {
+      ball.x = 200;
+      ball.y = 550;
+      ball.dx = 0;
+      ball.dy = 0;
+      ball.rolling = false;
+    }
+
+    function endRoll() {
+      const pinsDown = pins.filter(p => p.knocked).length - pinsThisFrame;
+      rolls.push(pinsDown);
+      pinsThisFrame += pinsDown;
+
+      // If strike on first roll
+      if (rollInFrame === 1 && pinsThisFrame === 10 && currentFrame < 10) {
+        rolls.push(0); // padding 2nd roll
+        currentFrame++;
+        rollInFrame = 1;
+        pinsThisFrame = 0;
+        setupPins();
+      } else if (rollInFrame === 2 || currentFrame === 10 && pinsThisFrame >= 10) {
+        // move to next frame
+        currentFrame++;
+        rollInFrame = 1;
+        pinsThisFrame = 0;
+        setupPins();
+      } else {
+        rollInFrame = 2;
+      }
+
+      if (currentFrame > 10) {
+        alert("🎉 Game Over! Final Score: " + calculateScore());
+        rolls = [];
+        currentFrame = 1;
+        rollInFrame = 1;
+        pinsThisFrame = 0;
+        setupPins();
+      }
+
+      resetBall();
+      updateUI();
+    }
+
+    function calculateScore() {
+      let total = 0;
+      let frame = 0;
+      let scores = [];
+
+      for (let i = 0; i < 10; i++) {
+        if (rolls[frame] === 10) {
+          // Strike
+          const bonus = (rolls[frame + 1] || 0) + (rolls[frame + 2] || 0);
+          total += 10 + bonus;
+          scores.push(total);
+          frame += 1;
+        } else if ((rolls[frame] || 0) + (rolls[frame + 1] || 0) === 10) {
+          // Spare
+          const bonus = rolls[frame + 2] || 0;
+          total += 10 + bonus;
+          scores.push(total);
+          frame += 2;
+        } else {
+          // Normal
+          const frameScore = (rolls[frame] || 0) + (rolls[frame + 1] || 0);
+          total += frameScore;
+          scores.push(total);
+          frame += 2;
+        }
+      }
+      return total;
+    }
+
+    function updateUI() {
+      const score = calculateScore();
+      scoreboard.textContent = `Frame: ${currentFrame <= 10 ? currentFrame : 10} | Roll: ${rollInFrame} | Score: ${score}`;
+      updateScoreTable();
+    }
+
+    function updateScoreTable() {
+      frameHeader.innerHTML = "";
+      frameScores.innerHTML = "";
+
+      let runningTotal = 0;
+      let frame = 0;
+
+      for (let i = 0; i < 10; i++) {
+        const th = document.createElement("th");
+        th.textContent = `F${i + 1}`;
+        frameHeader.appendChild(th);
+
+        let score = "";
+
+        if (rolls[frame] === 10) {
+          if (rolls[frame + 1] !== undefined && rolls[frame + 2] !== undefined) {
+            score = 10 + rolls[frame + 1] + rolls[frame + 2];
+            runningTotal += score;
+          }
+          frame += 1;
+        } else if (rolls[frame] !== undefined && rolls[frame + 1] !== undefined) {
+          const sum = rolls[frame] + rolls[frame + 1];
+          if (sum === 10 && rolls[frame + 2] !== undefined) {
+            score = 10 + rolls[frame + 2];
+            runningTotal += score;
+          } else if (sum < 10) {
+            score = sum;
+            runningTotal += sum;
+          }
+          frame += 2;
+        }
+
+        const td = document.createElement("td");
+        td.textContent = score !== "" ? runningTotal : "";
+        frameScores.appendChild(td);
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawLane();
+      drawPins();
+      drawBall();
+      updateBall();
+      requestAnimationFrame(draw);
+    }
+
+    canvas.addEventListener("mousedown", e => {
+      if (!ball.rolling) {
+        mouseStart = { x: e.offsetX, y: e.offsetY };
+      }
+    });
+
+    canvas.addEventListener("mouseup", e => {
+      if (mouseStart && !ball.rolling) {
+        const dx = mouseStart.x - e.offsetX;
+        const dy = mouseStart.y - e.offsetY;
+        ball.dx = -dx * 0.1;
+        ball.dy = -dy * 0.1;
+        ball.rolling = true;
+        mouseStart = null;
+      }
+    });
+
+    setupPins();
+    updateUI();
+    draw();
+  </script>
+</body>
+</html>
